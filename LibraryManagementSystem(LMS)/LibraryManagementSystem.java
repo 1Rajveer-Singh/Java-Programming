@@ -1,8 +1,6 @@
-//Import thing first enter adminusername,adminpassword and password(in connection of database)
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -18,13 +16,13 @@ public class LibraryManagementSystem extends JFrame {
     private DefaultTableModel issuedBooksTableModel;
     private DefaultTableModel activityLogTableModel;
     private JTabbedPane tabbedPane;
-    private String adminUsername = "user";
-    private String adminPassword = "password";
+    private String adminUsername = "rajveer";
+    private String adminPassword = "rks123";
 
     public LibraryManagementSystem() {
         // Initialize database connection and book manager
         try {
-            db = new DatabaseConnection("jdbc:mysql://localhost:3306/library_management", "root", "password");
+            db = new DatabaseConnection("jdbc:mysql://localhost:3306/library_management", "root", "rks@2552");
             bookManager = new BookManager(db);
         } catch (DatabaseException e) {
             JOptionPane.showMessageDialog(null, e.getMessage(), "Initialization Error", JOptionPane.ERROR_MESSAGE);
@@ -49,12 +47,30 @@ public class LibraryManagementSystem extends JFrame {
         tabbedPane.addTab("Return Book", createReturnBookPanel());
         disableTabsExceptActivityTracker();
 
-        // Add Admin Button on Top Right
+        // Add Admin and Logout Buttons on Top Right
         JPanel topPanel = new JPanel(new BorderLayout());
         JButton adminButton = new JButton("Admin");
-        adminButton.addActionListener(e -> showAdminLoginDialog());
-        topPanel.add(adminButton, BorderLayout.EAST);
+        JButton logoutButton = new JButton("Logout");
 
+        // Set admin login action
+        adminButton.addActionListener(e -> {
+            showAdminLoginDialog();
+           
+        });
+
+        // Set logout action
+        logoutButton.addActionListener(e -> {
+            disableTabsExceptActivityTracker();
+            logActivity("Logout", adminUsername);
+            JOptionPane.showMessageDialog(this, "Logged out successfully.");
+        });
+
+        // Add buttons to the top panel
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        buttonPanel.add(adminButton);
+        buttonPanel.add(logoutButton);
+
+        topPanel.add(buttonPanel, BorderLayout.EAST);
         add(topPanel, BorderLayout.NORTH);
         add(tabbedPane, BorderLayout.CENTER);
 
@@ -97,6 +113,7 @@ public class LibraryManagementSystem extends JFrame {
                 if (bookManager.addBook(id, title, author, publisher, year)) {
                     refreshBooksTable();
                     clearFields(idField, titleField, authorField, publisherField, yearField);
+                    logActivity("Add Book", "Book ID: " + id + ", Title: " + title);
                 }
             } catch (NumberFormatException ex) {
                 JOptionPane.showMessageDialog(this, "Please enter valid numeric values for ID and Year.", "Input Error", JOptionPane.ERROR_MESSAGE);
@@ -135,6 +152,7 @@ public class LibraryManagementSystem extends JFrame {
                     bookManager.getBooksTableModel().getValueAt(i, 3),
                     bookManager.getBooksTableModel().getValueAt(i, 4),
                     bookManager.getBooksTableModel().getValueAt(i,5)
+
             });
         }
     }
@@ -155,18 +173,18 @@ public class LibraryManagementSystem extends JFrame {
 
     private JPanel createViewIssuedBooksPanel() {
         JPanel panel = new JPanel(new BorderLayout());
-        issuedBooksTableModel = bookManager.getIssuedBooksTableModel(); // Initialize the issued books table model
+        issuedBooksTableModel = bookManager.getIssuedBooksTableModel();
         issuedBooksTable = new JTable(issuedBooksTableModel);
         JScrollPane scrollPane = new JScrollPane(issuedBooksTable);
         panel.add(scrollPane, BorderLayout.CENTER);
-    
-        // Add a refresh button to update the table
+
         JButton refreshButton = new JButton("Refresh");
-        refreshButton.addActionListener(e -> refreshIssuedBooksTable()); // Refresh issued books table on button click
-        panel.add(refreshButton, BorderLayout.SOUTH); // Add the refresh button at the bottom of the panel
-    
+        refreshButton.addActionListener(e -> refreshIssuedBooksTable());
+        panel.add(refreshButton, BorderLayout.SOUTH);
+
         return panel;
     }
+
     private JPanel createIssueBookPanel() {
         JPanel panel = new JPanel(new GridLayout(4, 2));
         JLabel bookIdLabel = new JLabel("Book ID:");
@@ -182,8 +200,9 @@ public class LibraryManagementSystem extends JFrame {
             String studentName = studentNameField.getText();
             String registrationNumber = registrationNumberField.getText();
             if (bookManager.issueBook(bookId, studentName, registrationNumber)) {
-                refreshBooksTable(); // Refresh books table after issuing
-                refreshIssuedBooksTable(); // Refresh issued books table after issuing
+                refreshBooksTable();
+                refreshIssuedBooksTable();
+                logActivity("Issue Book", "Book ID: " + bookId + ", Issued to: " + studentName);
             }
         });
 
@@ -200,8 +219,8 @@ public class LibraryManagementSystem extends JFrame {
     }
 
     private void refreshIssuedBooksTable() {
-        issuedBooksTableModel.setRowCount(0); // Clear existing data
-        DefaultTableModel newModel = bookManager.getIssuedBooksTableModel(); // Fetch fresh data
+        issuedBooksTableModel.setRowCount(0);
+        DefaultTableModel newModel = bookManager.getIssuedBooksTableModel();
         for (int i = 0; i < newModel.getRowCount(); i++) {
             issuedBooksTableModel.addRow(new Object[] {
                     newModel.getValueAt(i, 0),
@@ -210,12 +229,10 @@ public class LibraryManagementSystem extends JFrame {
                     newModel.getValueAt(i, 3),
                     newModel.getValueAt(i, 4),
                     newModel.getValueAt(i, 5),
-                    newModel.getValueAt(i, 6)
+                    newModel.getValueAt(i,6)
             });
         }
     }
-
-    
 
     private JPanel createReturnBookPanel() {
         JPanel panel = new JPanel(new GridLayout(2, 2));
@@ -229,16 +246,16 @@ public class LibraryManagementSystem extends JFrame {
                 if (bookManager.returnBook(bookId)) {
                     refreshBooksTable();
                     refreshIssuedBooksTable();
-                    bookIdField.setText(""); // Clear field after returning
+                    logActivity("Return Book", "Book ID: " + bookId);
                 }
             } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(this, "Please enter a valid Book ID.", "Input Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, "Invalid book ID format.", "Error", JOptionPane.ERROR_MESSAGE);
             }
         });
 
         panel.add(bookIdLabel);
         panel.add(bookIdField);
-        panel.add(new JLabel()); // Empty cell
+        panel.add(new JLabel());
         panel.add(returnButton);
 
         return panel;
@@ -292,87 +309,89 @@ public class LibraryManagementSystem extends JFrame {
         panel.add(formPanel, BorderLayout.NORTH);
         panel.add(tableScrollPane, BorderLayout.CENTER);
         return panel;}
-      private void loadActivityLog() {
-    // Clear the table model before loading new data to avoid duplicates
-    activityLogTableModel.setRowCount(0);
-
-    // Query to select all records from activity_log
-    String query = "SELECT * FROM activity_log";
-
-    try (PreparedStatement pstmt = db.getConnection().prepareStatement(query)) {
-        ResultSet rs = pstmt.executeQuery();
-
-        // Iterate over the ResultSet and add each row to the table model
-        while (rs.next()) {
-            String registrationNo = rs.getString("registration_no");
-            String name = rs.getString("name");
-            String activity = rs.getString("activity");
-            String date = rs.getString("date");
-            String time = rs.getString("time");
-
-            // Add a "Delete" button in the last column for each row
-            activityLogTableModel.addRow(new Object[]{registrationNo, name, activity, date, time, "Delete"});
-        }
-
-    } catch (SQLException e) {
-        JOptionPane.showMessageDialog(this, "Error loading activity log: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
-    }
-}
-
-    
-
-  private void logActivity(String registrationNumber, String name, String activity) {
-        String date = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
-        String time = new SimpleDateFormat("HH:mm:ss").format(new Date());
-        try (PreparedStatement pstmt = db.getConnection().prepareStatement(
-                "INSERT INTO activity_log (registration_no, name, activity, date, time) VALUES (?, ?, ?, ?, ?)")) {
-            pstmt.setString(1, registrationNumber);
-            pstmt.setString(2, name);
-            pstmt.setString(3, activity);
-            pstmt.setString(4, date);
-            pstmt.setString(5, time);
-            pstmt.executeUpdate();
-            activityLogTableModel.addRow(new Object[]{registrationNumber, name, activity, date, time});
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Error logging activity: " + ex.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
-        }
-    } private void deleteActivityLogEntry(String regNo) {
-        try (PreparedStatement pstmt = db.getConnection().prepareStatement("DELETE FROM activity_log WHERE registration_no = ?")) {
-            pstmt.setString(1, regNo);
-            pstmt.executeUpdate();
-            // Refresh the table
+        private void loadActivityLog() {
+            // Clear the table model before loading new data to avoid duplicates
             activityLogTableModel.setRowCount(0);
-            loadActivityLog(); // Reload the data after deletion
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Error deleting record: " + ex.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
-        }
-    }
-    
-    private void showAdminLoginDialog() {
-        JPanel loginPanel = new JPanel(new GridLayout(2, 2));
-        JLabel usernameLabel = new JLabel("Username:");
-        JTextField usernameField = new JTextField();
-        JLabel passwordLabel = new JLabel("Password:");
-        JPasswordField passwordField = new JPasswordField();
-
-        loginPanel.add(usernameLabel);
-        loginPanel.add(usernameField);
-        loginPanel.add(passwordLabel);
-        loginPanel.add(passwordField);
-    int result = JOptionPane.showConfirmDialog(this, loginPanel, "Admin Login", JOptionPane.OK_CANCEL_OPTION);
-        if (result == JOptionPane.OK_OPTION) {
-            String enteredUsername = usernameField.getText();
-            String enteredPassword = new String(passwordField.getPassword());
-            if (enteredUsername.equals(adminUsername) && enteredPassword.equals(adminPassword)) {
-                enableAllTabs(); // Enable all tabs after successful login
-                JOptionPane.showMessageDialog(this, "Login successful!");
-            } else {
-                JOptionPane.showMessageDialog(this, "Incorrect username or password.", "Login Failed", JOptionPane.ERROR_MESSAGE);
+        
+            // Query to select all records from activity_log
+            String query = "SELECT * FROM activity_log";
+        
+            try (PreparedStatement pstmt = db.getConnection().prepareStatement(query)) {
+                ResultSet rs = pstmt.executeQuery();
+        
+                // Iterate over the ResultSet and add each row to the table model
+                while (rs.next()) {
+                    String registrationNo = rs.getString("registration_no");
+                    String name = rs.getString("name");
+                    String activity = rs.getString("activity");
+                    String date = rs.getString("date");
+                    String time = rs.getString("time");
+        
+                    // Add a "Delete" button in the last column for each row
+                    activityLogTableModel.addRow(new Object[]{registrationNo, name, activity, date, time, "Delete"});
+                }
+        
+            } catch (SQLException e) {
+                JOptionPane.showMessageDialog(this, "Error loading activity log: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
             }
         }
+        private void logActivity(String registrationNumber, String name, String activity) {
+            String date = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
+            String time = new SimpleDateFormat("HH:mm:ss").format(new Date());
+            try (PreparedStatement pstmt = db.getConnection().prepareStatement(
+                    "INSERT INTO activity_log (registration_no, name, activity, date, time) VALUES (?, ?, ?, ?, ?)")) {
+                pstmt.setString(1, registrationNumber);
+                pstmt.setString(2, name);
+                pstmt.setString(3, activity);
+                pstmt.setString(4, date);
+                pstmt.setString(5, time);
+                pstmt.executeUpdate();
+                activityLogTableModel.addRow(new Object[]{registrationNumber, name, activity, date, time});
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this, "Error logging activity: " + ex.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+            }
+        } private void deleteActivityLogEntry(String regNo) {
+            try (PreparedStatement pstmt = db.getConnection().prepareStatement("DELETE FROM activity_log WHERE registration_no = ?")) {
+                pstmt.setString(1, regNo);
+                pstmt.executeUpdate();
+                // Refresh the table
+                activityLogTableModel.setRowCount(0);
+                loadActivityLog(); // Reload the data after deletion
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this, "Error deleting record: " + ex.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+            
+
+    private void showAdminLoginDialog() {
+        JTextField usernameField = new JTextField();
+        JPasswordField passwordField = new JPasswordField();
+        Object[] message = {
+            "Username:", usernameField,
+            "Password:", passwordField
+        };
+
+        int option = JOptionPane.showConfirmDialog(this, message, "Admin Login", JOptionPane.OK_CANCEL_OPTION);
+        if (option == JOptionPane.OK_OPTION) {
+            String username = usernameField.getText();
+            String password = new String(passwordField.getPassword());
+            if (username.equals(adminUsername) && password.equals(adminPassword)) {
+                JOptionPane.showMessageDialog(this, "Login successful!");
+                enableAllTabs();
+                logActivity("Admin Login", adminUsername);
+            } else {
+                JOptionPane.showMessageDialog(this, "Invalid username or password.");
+            }
+        }
+    }
+
+    private void logActivity(String action, String adminUsername) {
+        String date = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
+        String time = new SimpleDateFormat("HH:mm:ss").format(new Date());
+        activityLogTableModel.addRow(new Object[]{"Manager",adminUsername, action, date,time});
     }
 
     public static void main(String[] args) {
         new LibraryManagementSystem();
     }
-} 
+}
