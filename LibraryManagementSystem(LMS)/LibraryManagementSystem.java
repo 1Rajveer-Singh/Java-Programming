@@ -16,13 +16,13 @@ public class LibraryManagementSystem extends JFrame {
     private DefaultTableModel issuedBooksTableModel;
     private DefaultTableModel activityLogTableModel;
     private JTabbedPane tabbedPane;
-    private String adminUsername = "rajveer";
-    private String adminPassword = "rks123";
+    private String adminUsername = "Username";//add admin user name for login.
+    private String adminPassword = "Userpassword";//add admin user password for login.
 
     public LibraryManagementSystem() {
         // Initialize database connection and book manager
         try {
-            db = new DatabaseConnection("jdbc:mysql://localhost:3306/library_management", "root", "rks@2552");
+            db = new DatabaseConnection("jdbc:mysql://localhost:3306/library_management", "root", "password");//Enter the password for mysql
             bookManager = new BookManager(db);
         } catch (DatabaseException e) {
             JOptionPane.showMessageDialog(null, e.getMessage(), "Initialization Error", JOptionPane.ERROR_MESSAGE);
