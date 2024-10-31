@@ -11,7 +11,7 @@ Ideal for small libraries or academic institutions.
 
 - **Admin Login**: Secure access to manage library features.
 - **Admin Logout**:securely dissable the library features.
-- **Add & View Books**: Easily add, view, and manage book records.
+- **Add,Delete & View Books**: Easily add, view, and manage book records.
 - **Issue & Return Books**: Track book issue and return status.
 - **Activity Log**: Monitor user activities with timestamps for each action (Self Study, Reading Books, Issued Book, Return Book).
 - **Refresh Options**: Instant table refresh options to keep data current.
