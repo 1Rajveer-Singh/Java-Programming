@@ -25,7 +25,7 @@ Ideal for small libraries or academic institutions.
 3. **Activity Tracker**: Logs users' activities within the library.
 4. **Add Book Panel**: Add new books with details like ID, title, author, publisher, and year.
 5. **Delete Book Panel**:delete books which are not available in library.
-6. **View Books Panel**: Display and refresh current book records.
+6. **View Books Panel**: Display and refresh current book records,include search box.
 7. **Issue Book Panel**: Process book issues with details on student info.
 8. **View Issued Books Panel**: View currently issued books with refresh option.
 9. **Return Book Panel**: Manage book returns with automated status updates.
