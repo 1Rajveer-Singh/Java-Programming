@@ -1,4 +1,3 @@
-Here's a README.md file with an attractive, structured layout for **Library Management System** Java application:
 
 # 📚 Library Management System
 
