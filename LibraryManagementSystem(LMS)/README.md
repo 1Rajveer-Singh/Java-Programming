@@ -48,29 +48,41 @@ Ideal for small libraries or academic institutions.
      CREATE DATABASE library_management;
      USE library_management;
 
-     CREATE TABLE books (
-         id INT PRIMARY KEY,
-         title VARCHAR(255),
-         author VARCHAR(255),
-         publisher VARCHAR(255),
-         year INT
+     CREATE TABLE activity_log (
+      id INT NOT NULL AUTO_INCREMENT,
+      registration_no VARCHAR(255) NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      activity VARCHAR(255) NOT NULL,
+      date DATE NOT NULL,
+      time TIME NOT NULL,
+      PRIMARY KEY (id)
      );
+
+
+     CREATE TABLE books (
+      id INT NOT NULL AUTO_INCREMENT,
+      title VARCHAR(100) NOT NULL,
+      author VARCHAR(100) NOT NULL,
+      publisher VARCHAR(100) NOT NULL,
+      year INT NOT NULL,
+      available TINYINT(1) DEFAULT 1,
+      PRIMARY KEY (id)
+     );
+
 
      CREATE TABLE issued_books (
-         book_id INT,
-         student_name VARCHAR(255),
-         registration_number VARCHAR(255),
-         issue_date DATE,
-         return_date DATE
+      id INT NOT NULL AUTO_INCREMENT,
+      book_id INT NOT NULL UNIQUE,
+      student_name VARCHAR(100) NOT NULL,
+      registration_number VARCHAR(50) NOT NULL,
+      issue_date DATE NOT NULL,
+      return_date DATE NOT NULL,
+      PRIMARY KEY (id)
      );
 
-     CREATE TABLE activity_log (
-         registration_no VARCHAR(255),
-         name VARCHAR(255),
-         activity VARCHAR(255),
-         date DATE,
-         time TIME
-     );
+
+    
+        
      ```
 
 3. **Run the Application**
