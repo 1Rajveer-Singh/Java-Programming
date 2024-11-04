@@ -1,88 +1,342 @@
 import javax.swing.*;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 
-public class LibraryManagementSystem extends JFrame {
+// Custom exception for database operations
+class DatabaseException extends Exception {
+    public DatabaseException(String message) {
+        super(message);
+    }
+}
+
+// Database connection manager
+class DatabaseConnection {
+    private Connection connection;
+
+    public DatabaseConnection(String url, String user, String password) throws DatabaseException {
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            connection = DriverManager.getConnection(url, user, password);
+            System.out.println("Database connected successfully!");
+        } catch (ClassNotFoundException e) {
+            throw new DatabaseException("MySQL Driver not found: " + e.getMessage());
+        } catch (SQLException e) {
+            throw new DatabaseException("Failed to connect to the database: " + e.getMessage());
+        }
+    }
+
+    public Connection getConnection() {
+        return connection;
+    }
+
+    public void closeConnection() throws DatabaseException {
+        if (connection != null) {
+            try {
+                connection.close();
+                System.out.println("Database connection closed.");
+            } catch (SQLException e) {
+                throw new DatabaseException("Error while closing the connection: " + e.getMessage());
+            }
+        }
+    }
+}
+
+// BookManager handles all book-related operations with the database
+class BookManager {
+    private final Connection connection;
+    private static final String ADD_BOOK_QUERY = "INSERT INTO books (id, title, author, publisher, year, available) VALUES (?, ?, ?, ?, ?, TRUE)";
+    private static final String VIEW_BOOKS_QUERY = "SELECT b.id, b.title, b.author, b.publisher, b.year, (CASE WHEN ib.book_id IS NOT NULL THEN 'Issued' ELSE 'Available' END) AS status FROM books b LEFT JOIN issued_books ib ON b.id = ib.book_id";
+    private static final String ISSUE_BOOK_QUERY = "INSERT INTO issued_books (book_id, student_name, registration_number, issue_date, return_date) VALUES (?, ?, ?, ?, ?)";
+    private static final String VIEW_ISSUED_BOOKS_QUERY = "SELECT ib.id, ib.book_id, b.title, ib.student_name, ib.registration_number, ib.issue_date, ib.return_date FROM issued_books ib JOIN books b ON ib.book_id = b.id";
+    private static final String RETURN_BOOK_QUERY_UPDATE = "UPDATE books SET available = TRUE WHERE id = ? AND available = FALSE";
+    private static final String RETURN_BOOK_QUERY_DELETE = "DELETE FROM issued_books WHERE book_id = ?";
+   
+
+    public BookManager(DatabaseConnection db) throws DatabaseException {
+        this.connection = db.getConnection();
+        if (this.connection == null) {
+            throw new DatabaseException("Failed to initialize BookManager: connection is null.");
+        }
+    }
+
+    public boolean addBook(int id, String title, String author, String publisher, int year) {
+        if (!isValidBook(id, title, author, publisher, year)) {
+            showErrorDialog("Invalid input, please check the book details.");
+            return false;
+        }
+
+        try (PreparedStatement ps = connection.prepareStatement(ADD_BOOK_QUERY)) {
+            ps.setInt(1, id);
+            ps.setString(2, title);
+            ps.setString(3, author);
+            ps.setString(4, publisher);
+            ps.setInt(5, year);
+            int rowsAffected = ps.executeUpdate();
+            if (rowsAffected > 0) {
+                showInfoDialog("Book added successfully!");
+                return true;
+            } else {
+                showErrorDialog("Failed to add the book.");
+                return false;
+            }
+        } catch (SQLIntegrityConstraintViolationException e) {
+            showErrorDialog("Error: Book with ID " + id + " already exists.");
+            return false;
+        } catch (SQLException e) {
+            showErrorDialog("Error while adding book: " + e.getMessage());
+            return false;
+        }
+    }
+    private String calculateOverdueDate(String returnDateStr) {
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+        try {
+            Date returnDate = dateFormat.parse(returnDateStr);
+            long overdueMillis = returnDate.getTime() + (7L * 24 * 60 * 60 * 1000); // 7 days in milliseconds
+            Date overdueDate = new Date(overdueMillis);
+            return dateFormat.format(overdueDate);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "";
+        }
+    }
+    
+    public boolean deleteBook(int bookId) {
+        try {
+            String query = "DELETE FROM books WHERE id = ?";
+            PreparedStatement stmt = connection.prepareStatement(query);
+            stmt.setInt(1, bookId);
+            int rowsAffected = stmt.executeUpdate();
+            return rowsAffected > 0;
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(null, "Error deleting book: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+    }
+    
+
+    public DefaultTableModel getBooksTableModel(int bookId) {
+        DefaultTableModel model = new DefaultTableModel(new String[]{"ID", "Title", "Author", "Publisher", "Year", "Status"}, 0);
+        String query = bookId == -1 ? VIEW_BOOKS_QUERY : VIEW_BOOKS_QUERY + " WHERE b.id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(query)) {
+            if (bookId != -1) {
+                ps.setInt(1, bookId);
+            }
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                model.addRow(new Object[]{
+                        rs.getInt("id"),
+                        rs.getString("title"),
+                        rs.getString("author"),
+                        rs.getString("publisher"),
+                        rs.getInt("year"),
+                        rs.getString("status")
+                });
+            }
+        } catch (SQLException e) {
+            showErrorDialog("Error while retrieving books: " + e.getMessage());
+        }
+        return model;
+    }
+    
+    public boolean issueBook(int bookId, String studentName, String registrationNumber) {
+        String issueDate = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
+        Calendar calendar = Calendar.getInstance();
+        calendar.add(Calendar.DAY_OF_YEAR, 15);
+        String returnDate = new SimpleDateFormat("yyyy-MM-dd").format(calendar.getTime());
+
+        try (PreparedStatement ps = connection.prepareStatement(ISSUE_BOOK_QUERY)) {
+            ps.setInt(1, bookId);
+            ps.setString(2, studentName);
+            ps.setString(3, registrationNumber);
+            ps.setString(4, issueDate);
+            ps.setString(5, returnDate);
+
+            int rowsAffected = ps.executeUpdate();
+            if (rowsAffected > 0) {
+                showInfoDialog("Book issued successfully to " + studentName);
+                return true;
+            } else {
+                showErrorDialog("Book cannot be issued (either does not exist or is already issued).");
+                return false;
+            }
+        } catch (SQLException e) {
+            showErrorDialog("Error while issuing book: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public DefaultTableModel getIssuedBooksTableModel() {
+        DefaultTableModel model = new DefaultTableModel(new String[]{"ID", "Book ID", "Title", "Student Name", "Reg No", "Issue Date", "Return Date", "Overdue Date"}, 0);
+        try (Statement stmt = connection.createStatement(); ResultSet rs = stmt.executeQuery(VIEW_ISSUED_BOOKS_QUERY)) {
+            while (rs.next()) {
+                int id = rs.getInt("id");
+                int bookId = rs.getInt("book_id");
+                String title = rs.getString("title");
+                String studentName = rs.getString("student_name");
+                String registrationNumber = rs.getString("registration_number");
+                String issueDate = rs.getString("issue_date");
+                String returnDate = rs.getString("return_date");
+    
+                // Calculate overdue date
+                String overdueDate = calculateOverdueDate(returnDate);
+    
+                model.addRow(new Object[]{
+                    id,
+                    bookId,
+                    title,
+                    studentName,
+                    registrationNumber,
+                    issueDate,
+                    returnDate,
+                    overdueDate // Add the calculated overdue date here
+                });
+            }
+        } catch (SQLException e) {
+            showErrorDialog("Error while retrieving issued books: " + e.getMessage());
+        }
+        return model;
+    }
+    
+        
+
+    public boolean returnBook(int bookId) {
+        try (PreparedStatement psDelete = connection.prepareStatement(RETURN_BOOK_QUERY_DELETE);
+             PreparedStatement psUpdate = connection.prepareStatement(RETURN_BOOK_QUERY_UPDATE)) {
+
+            psDelete.setInt(1, bookId);
+            int rowsAffected = psDelete.executeUpdate();
+            if (rowsAffected > 0) {
+                psUpdate.setInt(1, bookId);
+                psUpdate.executeUpdate();
+                showInfoDialog("Book returned successfully!");
+                return true;
+            } else {
+                showErrorDialog("Book cannot be returned (either does not exist or was not issued).");
+                return false;
+            }
+        } catch (SQLException e) {
+            showErrorDialog("Error while returning book: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean isValidBook(int id, String title, String author, String publisher, int year) {
+        return title != null && !title.isEmpty() && author != null && !author.isEmpty() &&
+               publisher != null && !publisher.isEmpty() && year > 0 && id > 0;
+    }
+
+    private void showErrorDialog(String message) {
+        JOptionPane.showMessageDialog(null, message, "Error", JOptionPane.ERROR_MESSAGE);
+    }
+
+    private void showInfoDialog(String message) {
+        JOptionPane.showMessageDialog(null, message, "Information", JOptionPane.INFORMATION_MESSAGE);
+    }
+}
+class IssuedBooksTableRenderer extends DefaultTableCellRenderer {
+    @Override
+    public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                                                   boolean hasFocus, int row, int column) {
+        Component cell = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+        cell.setForeground(Color.BLACK);  // Default color
+
+        // Get the overdue date from the table model
+        String overdueDateStr = (String) table.getValueAt(row, 6);  // Assuming Overdue Date is in column index 6
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+
+        try {
+            Date overdueDate = dateFormat.parse(overdueDateStr);
+            Date currentDate = new Date();
+            
+            // If the current date is past the overdue date, show it in red
+            if (currentDate.after(overdueDate)) {
+                cell.setForeground(Color.RED);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();  // Handle parsing exceptions
+        }
+
+        return cell;
+    }
+}
+
+// Main application class to display the GUI
+public class LibraryManagement extends JFrame {
     private DatabaseConnection db;
     private BookManager bookManager;
     private JTable booksTable;
     private JTable issuedBooksTable;
     private DefaultTableModel booksTableModel;
     private DefaultTableModel issuedBooksTableModel;
+    private JTextField searchField;
     private DefaultTableModel activityLogTableModel;
     private JTabbedPane tabbedPane;
-    private String adminUsername = "Username";//add admin user name for login.
-    private String adminPassword = "Userpassword";//add admin user password for login.
+    private String adminUsername = "ADMIN-NAME";//add admin user name for login.
+    private String adminPassword = "ADMIN-PASSWORD";//add admin user password for login.
 
-    public LibraryManagementSystem() {
-        // Initialize database connection and book manager
+    public LibraryManagement() {
         try {
-            db = new DatabaseConnection("jdbc:mysql://localhost:3306/library_management", "root", "password");//Enter the password for mysql
+            //DATABASE=library_management , USER=root(for default user) , PASSWORD=Enter you database password which you set.
+            db = new DatabaseConnection("jdbc:mysql://localhost:3306/library_management", "root", "ENTER-DATABASE-PASSWORD");
             bookManager = new BookManager(db);
         } catch (DatabaseException e) {
             JOptionPane.showMessageDialog(null, e.getMessage(), "Initialization Error", JOptionPane.ERROR_MESSAGE);
             return;
         }
 
-        // Set up the main frame
         setTitle("Library Management System");
-        setSize(1000, 600);
+        setSize(800, 600);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
-
-        // Create tabs for various functionalities
+        //Attendance panel
         tabbedPane = new JTabbedPane();
         tabbedPane.addTab("Activity Tracker", createActivityPanel());
 
-        // Initially disable all other tabs except "Activity Tracker"
+       //Initially disable all other tabs except "Activity Tracker"
         tabbedPane.addTab("Add Book", createAddBookPanel());
         tabbedPane.addTab("View Books", createViewBooksPanel());
         tabbedPane.addTab("Issue Book", createIssueBookPanel());
         tabbedPane.addTab("View Issued Books", createViewIssuedBooksPanel());
         tabbedPane.addTab("Return Book", createReturnBookPanel());
+        tabbedPane.addTab("Delete Book", createDeleteBookPanel());
         disableTabsExceptActivityTracker();
 
+        
         // Add Admin and Logout Buttons on Top Right
         JPanel topPanel = new JPanel(new BorderLayout());
         JButton adminButton = new JButton("Admin");
         JButton logoutButton = new JButton("Logout");
-
         // Set admin login action
         adminButton.addActionListener(e -> {
-            showAdminLoginDialog();
-           
-        });
-
-        // Set logout action
-        logoutButton.addActionListener(e -> {
-            disableTabsExceptActivityTracker();
-            logActivity("Logout", adminUsername);
-            JOptionPane.showMessageDialog(this, "Logged out successfully.");
-        });
-
-        // Add buttons to the top panel
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        buttonPanel.add(adminButton);
-        buttonPanel.add(logoutButton);
-
-        topPanel.add(buttonPanel, BorderLayout.EAST);
-        add(topPanel, BorderLayout.NORTH);
-        add(tabbedPane, BorderLayout.CENTER);
-
-        setVisible(true);
+        showAdminLoginDialog();
+       
+    });
+    // Set logout action
+    logoutButton.addActionListener(e -> {
+        disableTabsExceptActivityTracker();
+        
+        JOptionPane.showMessageDialog(this, "Logged out successfully.");
+    });
+    // Add buttons to the top panel
+    JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+    buttonPanel.add(adminButton);
+    buttonPanel.add(logoutButton);
+    
+    topPanel.add(buttonPanel, BorderLayout.EAST);
+    add(topPanel, BorderLayout.NORTH);
+    add(tabbedPane, BorderLayout.CENTER);
+    setVisible(true);
     }
-
     private void disableTabsExceptActivityTracker() {
         for (int i = 1; i < tabbedPane.getTabCount(); i++) {
             tabbedPane.setEnabledAt(i, false);
         }
     }
-
     private void enableAllTabs() {
         for (int i = 0; i < tabbedPane.getTabCount(); i++) {
             tabbedPane.setEnabledAt(i, true);
@@ -91,16 +345,23 @@ public class LibraryManagementSystem extends JFrame {
 
     private JPanel createAddBookPanel() {
         JPanel panel = new JPanel(new GridLayout(6, 2));
-        JLabel idLabel = new JLabel("Book ID:");
-        JTextField idField = new JTextField();
-        JLabel titleLabel = new JLabel("Title:");
-        JTextField titleField = new JTextField();
-        JLabel authorLabel = new JLabel("Author:");
-        JTextField authorField = new JTextField();
-        JLabel publisherLabel = new JLabel("Publisher:");
-        JTextField publisherField = new JTextField();
-        JLabel yearLabel = new JLabel("Year:");
-        JTextField yearField = new JTextField();
+        JTextField idField = new JTextField(10);
+        JTextField titleField = new JTextField(10);
+        JTextField authorField = new JTextField(10);
+        JTextField publisherField = new JTextField(10);
+        JTextField yearField = new JTextField(10);
+        
+
+        panel.add(new JLabel("Book ID:"));
+        panel.add(idField);
+        panel.add(new JLabel("Title:"));
+        panel.add(titleField);
+        panel.add(new JLabel("Author:"));
+        panel.add(authorField);
+        panel.add(new JLabel("Publisher:"));
+        panel.add(publisherField);
+        panel.add(new JLabel("Year:"));
+        panel.add(yearField);
 
         JButton addButton = new JButton("Add Book");
         addButton.addActionListener(e -> {
@@ -110,157 +371,185 @@ public class LibraryManagementSystem extends JFrame {
                 String author = authorField.getText();
                 String publisher = publisherField.getText();
                 int year = Integer.parseInt(yearField.getText());
+
                 if (bookManager.addBook(id, title, author, publisher, year)) {
-                    refreshBooksTable();
-                    clearFields(idField, titleField, authorField, publisherField, yearField);
-                    logActivity("Add Book", "Book ID: " + id + ", Title: " + title);
+                    booksTableModel.setRowCount(0); // Refresh the table after adding a book
+                    refreshBooksTable(-1);
                 }
             } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(this, "Please enter valid numeric values for ID and Year.", "Input Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(null, "Please enter valid details for the book.", "Input Error", JOptionPane.ERROR_MESSAGE);
             }
         });
-
-        panel.add(idLabel);
-        panel.add(idField);
-        panel.add(titleLabel);
-        panel.add(titleField);
-        panel.add(authorLabel);
-        panel.add(authorField);
-        panel.add(publisherLabel);
-        panel.add(publisherField);
-        panel.add(yearLabel);
-        panel.add(yearField);
-        panel.add(new JLabel()); // Empty cell
+        panel.add(new JLabel());
         panel.add(addButton);
-
         return panel;
     }
-
     private void clearFields(JTextField... fields) {
         for (JTextField field : fields) {
             field.setText("");
         }
     }
-
-    private void refreshBooksTable() {
-        booksTableModel.setRowCount(0); // Clear existing data
-        for (int i = 0; i < bookManager.getBooksTableModel().getRowCount(); i++) {
-            booksTableModel.addRow(new Object[]{
-                    bookManager.getBooksTableModel().getValueAt(i, 0),
-                    bookManager.getBooksTableModel().getValueAt(i, 1),
-                    bookManager.getBooksTableModel().getValueAt(i, 2),
-                    bookManager.getBooksTableModel().getValueAt(i, 3),
-                    bookManager.getBooksTableModel().getValueAt(i, 4),
-                    bookManager.getBooksTableModel().getValueAt(i,5)
-
-            });
-        }
-    }
-
-    private JPanel createViewBooksPanel() {
-        JPanel panel = new JPanel(new BorderLayout());
-        booksTableModel = bookManager.getBooksTableModel();
-        booksTable = new JTable(booksTableModel);
-        JScrollPane scrollPane = new JScrollPane(booksTable);
-        panel.add(scrollPane, BorderLayout.CENTER);
-
-        JButton refreshButton = new JButton("Refresh");
-        refreshButton.addActionListener(e -> refreshBooksTable());
-        panel.add(refreshButton, BorderLayout.SOUTH);
-
+    private JPanel createDeleteBookPanel() {
+        JPanel panel = new JPanel(new GridLayout(2, 2));
+        JLabel bookIdLabel = new JLabel("Book ID:");
+        JTextField bookIdField = new JTextField();
+    
+        JButton deleteButton = new JButton("Delete Book");
+        deleteButton.addActionListener(e -> {
+            try {
+                int bookId = Integer.parseInt(bookIdField.getText());
+                int confirm = JOptionPane.showConfirmDialog(
+                    this, 
+                    "Are you sure you want to delete the book with ID: " + bookId + "?",
+                    "Confirm Deletion", 
+                    JOptionPane.YES_NO_OPTION
+                );
+    
+                if (confirm == JOptionPane.YES_OPTION) {
+                    if (bookManager.deleteBook(bookId)) {
+                        refreshBooksTable(-1);
+                        refreshIssuedBooksTable();
+                        bookIdField.setText("");  // Clear the text field after deletion
+                        
+                        JOptionPane.showMessageDialog(this, "Book deleted successfully.");
+                    } else {
+                        JOptionPane.showMessageDialog(this, "Book ID not found.", "Error", JOptionPane.ERROR_MESSAGE);
+                    }
+                }
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(this, "Please enter a valid numeric Book ID.", "Input Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+    
+        panel.add(bookIdLabel);
+        panel.add(bookIdField);
+        panel.add(new JLabel()); // Empty cell for layout spacing
+        panel.add(deleteButton);
+    
         return panel;
     }
+    
+    private String calculateOverdueDate(String returnDateStr) {
+    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+    try {
+        Date returnDate = dateFormat.parse(returnDateStr);
+        // Add 7 days to the return date for the overdue date
+        long overdueMillis = returnDate.getTime() + (7L * 24 * 60 * 60 * 1000);  // 7 days in milliseconds
+        Date overdueDate = new Date(overdueMillis);
+        return dateFormat.format(overdueDate);
+    } catch (Exception e) {
+        e.printStackTrace();
+        return "";
+    }
+}
 
-    private JPanel createViewIssuedBooksPanel() {
+    
+    private JPanel createViewBooksPanel() {
         JPanel panel = new JPanel(new BorderLayout());
-        issuedBooksTableModel = bookManager.getIssuedBooksTableModel();
-        issuedBooksTable = new JTable(issuedBooksTableModel);
-        JScrollPane scrollPane = new JScrollPane(issuedBooksTable);
-        panel.add(scrollPane, BorderLayout.CENTER);
-
+        JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JLabel searchLabel = new JLabel("Search by Book ID:");
+        searchField = new JTextField(10);
+        JButton searchButton = new JButton("Search");
         JButton refreshButton = new JButton("Refresh");
-        refreshButton.addActionListener(e -> refreshIssuedBooksTable());
-        panel.add(refreshButton, BorderLayout.SOUTH);
+
+        searchButton.addActionListener(e -> {
+            try {
+                int bookId = Integer.parseInt(searchField.getText());
+                refreshBooksTable(bookId);
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(null, "Please enter a valid book ID.", "Input Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        refreshButton.addActionListener(e -> refreshBooksTable(-1));
+
+        searchPanel.add(searchLabel);
+        searchPanel.add(searchField);
+        searchPanel.add(searchButton);
+        searchPanel.add(refreshButton);
+
+        booksTableModel = new DefaultTableModel(new String[]{"ID", "Title", "Author", "Publisher", "Year", "Status"}, 0);
+        booksTable = new JTable(booksTableModel);
+
+        panel.add(searchPanel, BorderLayout.NORTH);
+        panel.add(new JScrollPane(booksTable), BorderLayout.CENTER);
+        refreshBooksTable(-1);
 
         return panel;
     }
 
     private JPanel createIssueBookPanel() {
         JPanel panel = new JPanel(new GridLayout(4, 2));
-        JLabel bookIdLabel = new JLabel("Book ID:");
-        JTextField bookIdField = new JTextField();
-        JLabel studentNameLabel = new JLabel("Student Name:");
-        JTextField studentNameField = new JTextField();
-        JLabel registrationNumberLabel = new JLabel("Reg. Number:");
-        JTextField registrationNumberField = new JTextField();
+        JTextField bookIdField = new JTextField(10);
+        JTextField studentNameField = new JTextField(10);
+        JTextField registrationNumberField = new JTextField(10);
+
+        panel.add(new JLabel("Book ID:"));
+        panel.add(bookIdField);
+        panel.add(new JLabel("Student Name:"));
+        panel.add(studentNameField);
+        panel.add(new JLabel("Registration Number:"));
+        panel.add(registrationNumberField);
 
         JButton issueButton = new JButton("Issue Book");
         issueButton.addActionListener(e -> {
-            int bookId = Integer.parseInt(bookIdField.getText());
-            String studentName = studentNameField.getText();
-            String registrationNumber = registrationNumberField.getText();
-            if (bookManager.issueBook(bookId, studentName, registrationNumber)) {
-                refreshBooksTable();
-                refreshIssuedBooksTable();
-                logActivity("Issue Book", "Book ID: " + bookId + ", Issued to: " + studentName);
+            try {
+                int bookId = Integer.parseInt(bookIdField.getText());
+                String studentName = studentNameField.getText();
+                String registrationNumber = registrationNumberField.getText();
+                if (bookManager.issueBook(bookId, studentName, registrationNumber)) {
+                    refreshBooksTable(-1);
+                    refreshIssuedBooksTable();
+                }
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(null, "Please enter valid details for issuing the book.", "Input Error", JOptionPane.ERROR_MESSAGE);
             }
         });
-
-        panel.add(bookIdLabel);
-        panel.add(bookIdField);
-        panel.add(studentNameLabel);
-        panel.add(studentNameField);
-        panel.add(registrationNumberLabel);
-        panel.add(registrationNumberField);
-        panel.add(new JLabel()); // Empty cell
+        panel.add(new JLabel());
         panel.add(issueButton);
-
+        return panel;
+    }
+    
+    private JPanel createViewIssuedBooksPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        issuedBooksTableModel = new DefaultTableModel(new String[]{"ID", "Book ID", "Title", "Student Name", "Reg No", "Issue Date", "Return Date","Overdue Date"}, 0);
+        issuedBooksTable = new JTable(issuedBooksTableModel);
+        issuedBooksTable.setDefaultRenderer(Object.class, new IssuedBooksTableRenderer());
+        panel.add(new JScrollPane(issuedBooksTable), BorderLayout.CENTER);
+        refreshIssuedBooksTable();
         return panel;
     }
 
-    private void refreshIssuedBooksTable() {
-        issuedBooksTableModel.setRowCount(0);
-        DefaultTableModel newModel = bookManager.getIssuedBooksTableModel();
-        for (int i = 0; i < newModel.getRowCount(); i++) {
-            issuedBooksTableModel.addRow(new Object[] {
-                    newModel.getValueAt(i, 0),
-                    newModel.getValueAt(i, 1),
-                    newModel.getValueAt(i, 2),
-                    newModel.getValueAt(i, 3),
-                    newModel.getValueAt(i, 4),
-                    newModel.getValueAt(i, 5),
-                    newModel.getValueAt(i,6)
-            });
-        }
-    }
-
     private JPanel createReturnBookPanel() {
-        JPanel panel = new JPanel(new GridLayout(2, 2));
-        JLabel bookIdLabel = new JLabel("Book ID:");
-        JTextField bookIdField = new JTextField();
-
+        JPanel panel = new JPanel(new GridLayout(2,2));
         JButton returnButton = new JButton("Return Book");
-        returnButton.addActionListener(e -> {
-            try {
-                int bookId = Integer.parseInt(bookIdField.getText());
-                if (bookManager.returnBook(bookId)) {
-                    refreshBooksTable();
-                    refreshIssuedBooksTable();
-                    logActivity("Return Book", "Book ID: " + bookId);
-                }
-            } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(this, "Invalid book ID format.", "Error", JOptionPane.ERROR_MESSAGE);
-            }
-        });
-
+        JTextField bookIdField = new JTextField();
+        JLabel bookIdLabel=new JLabel("Book ID:");
+        
+        
+        
         panel.add(bookIdLabel);
         panel.add(bookIdField);
         panel.add(new JLabel());
         panel.add(returnButton);
+        
+        
+        
+
+        returnButton.addActionListener(e -> {
+            try {
+                int bookId = Integer.parseInt(bookIdField.getText());
+                if (bookManager.returnBook(bookId)) {
+                    refreshBooksTable(-1);
+                    refreshIssuedBooksTable();
+                }
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(null, "Please enter a valid book ID.", "Input Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
 
         return panel;
     }
-
     private JPanel createActivityPanel() {
         JPanel panel = new JPanel(new BorderLayout());
 
@@ -391,7 +680,17 @@ public class LibraryManagementSystem extends JFrame {
         activityLogTableModel.addRow(new Object[]{"Manager",adminUsername, action, date,time});
     }
 
+
+
+    private void refreshBooksTable(int bookId) {
+        booksTable.setModel(bookManager.getBooksTableModel(bookId));
+    }
+
+    private void refreshIssuedBooksTable() {
+        issuedBooksTable.setModel(bookManager.getIssuedBooksTableModel());
+    }
+
     public static void main(String[] args) {
-        new LibraryManagementSystem();
+        SwingUtilities.invokeLater(LibraryManagement::new);
     }
 }
