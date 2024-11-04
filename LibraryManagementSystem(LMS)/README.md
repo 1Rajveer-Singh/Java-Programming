@@ -100,15 +100,15 @@ Ideal for small libraries or academic institutions.
 
 ---
 ##SCREEN-SHORT:
-![Screenshot 2024-10-29 203511](https://github.com/user-attachments/assets/Screenshot 2024-11-04 130100.png").
-"C:\Users\rkste\Desktop\PROJECT HOLDING TEAM FOR SCREEN SHORT WORK IS ONN\Screenshot 2024-11-04 130201.png"
-"C:\Users\rkste\Desktop\PROJECT HOLDING TEAM FOR SCREEN SHORT WORK IS ONN\Screenshot 2024-11-04 130522.png"
-"C:\Users\rkste\Desktop\PROJECT HOLDING TEAM FOR SCREEN SHORT WORK IS ONN\Screenshot 2024-11-04 130301.png"
-"C:\Users\rkste\Desktop\PROJECT HOLDING TEAM FOR SCREEN SHORT WORK IS ONN\Screenshot 2024-11-04 130456.png"
-"C:\Users\rkste\Desktop\PROJECT HOLDING TEAM FOR SCREEN SHORT WORK IS ONN\Screenshot 2024-11-04 130618.png"
-"C:\Users\rkste\Desktop\PROJECT HOLDING TEAM FOR SCREEN SHORT WORK IS ONN\Screenshot 2024-11-04 130645.png"
-"C:\Users\rkste\Desktop\PROJECT HOLDING TEAM FOR SCREEN SHORT WORK IS ONN\Screenshot 2024-11-04 130933.png"
+![Screenshot 2024-11-04 130100](https://github.com/user-attachments/assets/a8542a3f-0622-4f87-90e3-4722e1304015)
+![Screenshot 2024-11-04 130201](https://github.com/user-attachments/assets/961ebd21-180d-457f-839a-4c11478cd6ec)
+![Screenshot 2024-11-04 130522](https://github.com/user-attachments/assets/6f7c2e78-6aa4-44a5-ae3c-42474db39a37)
 
+![Screenshot 2024-11-04 130301](https://github.com/user-attachments/assets/760643ae-3c1c-4b13-8080-d137908c6c19)
+![Screenshot 2024-11-04 130456](https://github.com/user-attachments/assets/81d69c78-5744-4c4b-98c7-8d8a17f97484)
+![Screenshot 2024-11-04 130618](https://github.com/user-attachments/assets/d783c92c-7070-4422-9ba3-a8301b2302b2)
+![Screenshot 2024-11-04 130645](https://github.com/user-attachments/assets/f0fd8a4b-7f10-47b4-b447-bbca084b7965)
+![Screenshot 2024-11-04 130933](https://github.com/user-attachments/assets/2509372a-7ab9-43d1-ba9b-b3850cf02f36)
 
 ## 🛠️ Requirements
 
