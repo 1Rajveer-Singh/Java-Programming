@@ -122,7 +122,7 @@ Ideal for small libraries or academic institutions.
 
 - **LibraryManagementSystem.java**: Main class and GUI controller.
 - **DatabaseConnection.java**: Manages database connection.
-- **BookManager.java**: Handles book data operations (add, issue, return).
+- **BookManager.java**: Handles book data operations (add, issue, return,delete).
 
 ---
 
