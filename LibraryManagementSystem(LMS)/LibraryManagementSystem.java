@@ -48,6 +48,7 @@ class DatabaseConnection {
 
 // BookManager handles all book-related operations with the database
 class BookManager {
+    //Mysql commands of operation
     private final Connection connection;
     private static final String ADD_BOOK_QUERY = "INSERT INTO books (id, title, author, publisher, year, available) VALUES (?, ?, ?, ?, ?, TRUE)";
     private static final String VIEW_BOOKS_QUERY = "SELECT b.id, b.title, b.author, b.publisher, b.year, (CASE WHEN ib.book_id IS NOT NULL THEN 'Issued' ELSE 'Available' END) AS status FROM books b LEFT JOIN issued_books ib ON b.id = ib.book_id";
@@ -63,7 +64,7 @@ class BookManager {
             throw new DatabaseException("Failed to initialize BookManager: connection is null.");
         }
     }
-
+    //Add book function
     public boolean addBook(int id, String title, String author, String publisher, int year) {
         if (!isValidBook(id, title, author, publisher, year)) {
             showErrorDialog("Invalid input, please check the book details.");
@@ -92,6 +93,7 @@ class BookManager {
             return false;
         }
     }
+    //calculateoverdueDate function
     private String calculateOverdueDate(String returnDateStr) {
         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
         try {
